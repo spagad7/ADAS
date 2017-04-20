@@ -27,6 +27,9 @@ int main()
 	// Load templates
 	templates = loadTemplates();
 
+	// Calculate Homography
+	Mat H = calculateHomography();
+
 	for(int i=1; i<=numImages; i++)
 	{
 		
@@ -47,9 +50,6 @@ int main()
 		// Read source image
 		Mat img_src = imread( filename, CV_LOAD_IMAGE_COLOR );
 
-		// Calculate Homography
-		Mat H = calculateHomography();
-
 		// Set region of interest
 		Mat img_roi = img_src(Rect(285, 300, 230, 90));
 		//imshow("roi", img_roi);
@@ -62,6 +62,7 @@ int main()
 
 		// Warp image
 		warpPerspective(img_roi, img_warp, H, img_warp.size());
+		imshow("WarpedImg", img_warp);
 
 		// Draw ROI on img
 		line(img_src, Point(375, 300), Point(445, 300), Scalar(0, 0, 255), 2, 8);
@@ -75,7 +76,7 @@ int main()
 		//findLaneMarker(img_warp);
 
 		// Detect road markings
-		findMatch(img_warp, templates);
+		//findMatch(img_warp, templates);
 
 		waitKey(10);
 
