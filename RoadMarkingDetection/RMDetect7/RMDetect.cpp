@@ -58,19 +58,29 @@ int main()
 
 		// Set region of interest
 		Mat img_roi = img_src(Rect(285, 300, 230, 90));
+		//imshow("roi", img_roi);
+		String roifilename = "img_roi_" + std::to_string(i) + ".jpg";
+		imwrite(roifilename, img_roi);
+		//waitKey(0);
 		
 		// Create black destination image
 		Mat img_warp(300, 200, CV_8UC3, Scalar(0,0,0));
+		//Mat img_warp(900, 1200, CV_8UC3, Scalar(0,0,0));
 
 		// Warp image
 		warpPerspective(img_roi, img_warp, H, img_warp.size());
 		//imshow("Warped image", img_warp);
+		String warpfilename = "img_warp_" + std::to_string(i) + ".jpg";
+		imwrite(warpfilename, img_warp);
+
 
 		// Draw ROI on img
 		line(img_src, Point(375, 300), Point(445, 300), Scalar(0, 0, 255), 2, 8);
 		line(img_src, Point(445, 300), Point(515, 390), Scalar(0, 0, 255), 2, 8);
 		line(img_src, Point(515, 390), Point(285, 390), Scalar(0, 0, 255), 2, 8);
 		line(img_src, Point(285, 390), Point(375, 300), Scalar(0, 0, 255), 2, 8);
+
+		//imshow("Source Image", img_src);
 
 		// Detect lane markers
 		//findLaneMarker(img_warp);
