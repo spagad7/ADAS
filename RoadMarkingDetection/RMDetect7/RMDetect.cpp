@@ -1,6 +1,9 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include <vector>
+#include <errno.h>
+#include <dirent.h>
 #include <opencv2/opencv.hpp>
 #include <math.h>
 
@@ -10,77 +13,53 @@ using namespace std;
 
 // Function Declarations
 Mat calculateHomography(void);
-Mat calculateInvHomography(void);
-vector<Mat> loadTemplates(void);
-void findLaneMarker(Mat img);
+void loadImages(string, vector<Mat> &);
+void getFilesInDir(string, vector<string> &);
 void findMatch(Mat, vector<Mat>, vector<Point> &);
 Mat drawPolygon(Mat , Mat, vector<Point> &);
+void findLaneMarker(Mat img);
 double calcSSD(Mat, Mat);
 
 
 int main() 
 {
 
-	string filename;
 	vector<Mat> templates;
+	vector<Mat> images;
 	vector<Point> matchPoints;
-	int numImages = 1433;
-	//int numImages = 1;
 
 	// Load templates
-	templates = loadTemplates();
+	string tempDirName = "../Templates";
+	loadImages(tempDirName, templates);
+
+	// Load images
+	string imgDirName = "../../RoadMarkings";
+	loadImages(imgDirName, images);
 
 	// Calculate Homography
 	Mat H = calculateHomography();
-	//cout << "H = " << H << endl << endl;
 
 	// Calculate Inverse Homography
-	Mat I = calculateInvHomography();
-	//cout << "I = " << I << endl << endl;
+	Mat I = H.inv();
 
-	for(int i=1; i<=numImages; i++)
+
+	for(unsigned int i=0; i<images.size(); i++)
 	{
 		
-		string filename;
-
-		// Generate filename
-		if(i<=9)
-			filename = "../../RoadMarkings/roadmark_000" + std::to_string(i) + ".jpg";
-		else if(i>=10 && i<=99)
-			filename = "../../RoadMarkings/roadmark_00" + std::to_string(i) + ".jpg";
-		else if(i>=100 && i<=999)
-			filename = "../../RoadMarkings/roadmark_0" + std::to_string(i) + ".jpg";
-		else
-			filename = "../../RoadMarkings/roadmark_" + std::to_string(i) + ".jpg";
-		
-		// Read source image
-		Mat img_src = imread( filename, CV_LOAD_IMAGE_COLOR );
-
 		// Set region of interest
-		Mat img_roi = img_src(Rect(285, 300, 230, 90));
-		//imshow("roi", img_roi);
-		String roifilename = "img_roi_" + std::to_string(i) + ".jpg";
-		imwrite(roifilename, img_roi);
-		//waitKey(0);
+		Mat img_roi = images[i](Rect(285, 300, 230, 90));
 		
 		// Create black destination image
 		Mat img_warp(300, 200, CV_8UC3, Scalar(0,0,0));
-		//Mat img_warp(900, 1200, CV_8UC3, Scalar(0,0,0));
 
 		// Warp image
 		warpPerspective(img_roi, img_warp, H, img_warp.size());
-		//imshow("Warped image", img_warp);
-		String warpfilename = "img_warp_" + std::to_string(i) + ".jpg";
-		imwrite(warpfilename, img_warp);
-
 
 		// Draw ROI on img
-		line(img_src, Point(375, 300), Point(445, 300), Scalar(0, 0, 255), 2, 8);
-		line(img_src, Point(445, 300), Point(515, 390), Scalar(0, 0, 255), 2, 8);
-		line(img_src, Point(515, 390), Point(285, 390), Scalar(0, 0, 255), 2, 8);
-		line(img_src, Point(285, 390), Point(375, 300), Scalar(0, 0, 255), 2, 8);
-
-		//imshow("Source Image", img_src);
+		line(images[i], Point(375, 300), Point(445, 300), Scalar(0, 0, 255), 2, 8);
+		line(images[i], Point(445, 300), Point(515, 390), Scalar(0, 0, 255), 2, 8);
+		line(images[i], Point(515, 390), Point(285, 390), Scalar(0, 0, 255), 2, 8);
+		line(images[i], Point(285, 390), Point(375, 300), Scalar(0, 0, 255), 2, 8);
 
 		// Detect lane markers
 		//findLaneMarker(img_warp);
@@ -89,7 +68,7 @@ int main()
 		findMatch(img_warp, templates, matchPoints);
 
 		// Draw polygon for matched region
-		Mat img_final = drawPolygon(img_src, I, matchPoints);
+		Mat img_final = drawPolygon(images[i], I, matchPoints);
 
 		imshow("Output", img_final);
 
@@ -97,9 +76,52 @@ int main()
 
 		waitKey(1);
 	}
-	
+
 	return 0;
 	
+}
+
+
+
+// Function to load templates
+void loadImages(string dirName, vector<Mat> &imgVector)
+{
+	vector<string> files;
+
+	getFilesInDir(dirName, files);
+
+	for(unsigned int i=0; i<files.size(); i++)
+	{
+		Mat img_tmp = imread(files[i], CV_LOAD_IMAGE_COLOR);
+		imgVector.push_back(img_tmp.clone());
+	}
+
+}
+
+
+
+// Function to get filenames
+void getFilesInDir(string dirName, vector<string> &files)
+{
+	DIR *dp;
+	struct dirent *dirp;
+
+	if((dp = opendir(dirName.c_str())) == NULL)
+	{
+		cout << "Error(" << errno << ") opening" << dirName << endl;
+	}
+
+	while ((dirp = readdir(dp)) != NULL)
+	{
+		string fileName = dirName + "/" + string(dirp->d_name);
+		if(string(dirp->d_name) != "." && string(dirp->d_name) != "..")
+			files.push_back(fileName);
+	}
+
+	closedir(dp);
+
+	sort(files.begin(), files.end());
+
 }
 
 
@@ -129,64 +151,12 @@ Mat calculateHomography(void)
 	return(H);
 }
 
-Mat calculateInvHomography(void)
-{
-	vector<Point2f> pts_src, pts_dst;
-
-	// Corners in source image
-	pts_src.push_back(Point2f(8, 137));
-	pts_src.push_back(Point2f(171, 139));
-	pts_src.push_back(Point2f(172, 274));
-	pts_src.push_back(Point2f(2, 273));
-//	pts_src.push_back(Point2f(39, 136));
-//	pts_src.push_back(Point2f(144, 135));
-//	pts_src.push_back(Point2f(140, 278));
-//	pts_src.push_back(Point2f(30, 278));
-
-	// Corners in destination image
-	pts_dst.push_back(Point2f(76,20));
-	pts_dst.push_back(Point2f(160,20));
-	pts_dst.push_back(Point2f(187,69));
-	pts_dst.push_back(Point2f(24,69));
-//	pts_dst.push_back(Point2f(91,192));
-//	pts_dst.push_back(Point2f(144,19));
-//	pts_dst.push_back(Point2f(156,71));
-//	pts_dst.push_back(Point2f(48,72));
-
-	// Calculate homography
-	// Note: findHomography is better than getPerspectiveTranform. 
-	// It uses RANSAC
-	Mat I = findHomography(pts_src, pts_dst);
-
-	return(I);	
-}
-
-
-
-// Function to load templates
-vector<Mat> loadTemplates(void)
-{
-	int numTemplates = 23;
-	string filename;
-	vector<Mat> templateVector;
-	
-
-	for(int i=1; i<=numTemplates; i++)
-	{
-		filename = "../Templates/temp" + std::to_string(i) + ".png";
-		Mat img_temp = imread(filename, CV_LOAD_IMAGE_COLOR);
-		templateVector.push_back(img_temp.clone());
-	}
-
-	return(templateVector);
-}
-
 
 
 // Function to detect road markings using template matching
 void findMatch(Mat img_src, vector<Mat> templates, vector<Point> &matchPoints)
 {
-	Mat img_src_gray, img_src_edge, img_temp_gray, img_temp_edge;
+	Mat img_src_gray, img_src_edge;
 	unsigned int numTemplates = templates.size();
 	vector<double> maxVal(numTemplates), minVal(numTemplates), ssd(numTemplates);
 	vector<Point> minLoc(numTemplates), maxLoc(numTemplates);
@@ -202,9 +172,10 @@ void findMatch(Mat img_src, vector<Mat> templates, vector<Point> &matchPoints)
 	Canny(img_src_edge, img_src_edge, cannyLowThresh, cannyHighThresh);
 	
 	
-	//#pragma omp parallel for
+	#pragma omp parallel for
 	for(unsigned int i=0; i<templates.size(); i++)
 	{
+		Mat img_temp_gray, img_temp_edge;
 		cvtColor(templates[i], img_temp_gray, CV_BGR2GRAY);
 		blur(img_temp_gray, img_temp_edge, Size(3,3) );
 		Canny(img_temp_edge, img_temp_edge, cannyLowThresh, cannyHighThresh);
@@ -242,10 +213,6 @@ void findMatch(Mat img_src, vector<Mat> templates, vector<Point> &matchPoints)
 		matchPoints.push_back(Point(maxLoc[bestIndex].x, maxLoc[bestIndex].y + templates[bestIndex].rows));
 
 	}
-	//imshow("Warped image", img_src);
-
-	// Display images
-	//imshow("Detected Roadmarking", img_src);
 
 }
 
@@ -257,23 +224,13 @@ Mat drawPolygon(Mat img, Mat I, vector<Point> &warpedPoints)
 	{
 		vector<Point> origPoints(warpedPoints.size());
 
-		//cout << "warpedPoints" << warpedPoints << endl;
-
 		for(unsigned int i=0; i<warpedPoints.size(); i++)
 		{
-			//cout << "Warped Point = " << warpedPoints[i] << endl;
 			int data[] = {warpedPoints[i].x, warpedPoints[i].y, 1};
 			Mat V(3, 1, CV_32S, data);
 			V.convertTo(V, CV_64F);
-			//cout << "V vector = " << V << endl;
-			//cout << "Hinv = " << H.inv() << endl;
 			Mat prod = I * V;
-			//cout << "Prod = " << prod << endl;
-			//prod.convertTo(prod, CV_32S);
-			//cout << "Prod CV_32S = " << prod << endl;
-			//cout << "prod.at<double>(0) = " << prod.at<double>(0) << endl;
-			//cout << "prod.at<double>(1) = " << prod.at<double>(1) << endl;
-			//cout << "prod.at<double>(2) = " << prod.at<double>(2) << endl;
+
 			if(prod.at<double>(2) != 0)
 			{
 				origPoints[i].x = ( prod.at<double>(0) / prod.at<double>(2) ) + 285;
@@ -283,13 +240,8 @@ Mat drawPolygon(Mat img, Mat I, vector<Point> &warpedPoints)
 			{
 				origPoints[i].x = 0;
 				origPoints[i].y = 0;
-			}
-			
+			}		
 		}
-
-
-		//cout << "OrigPoints" << origPoints << endl << endl;
-
 
 		// Draw Lines. Points are in order: TopLeft, TopRight, BottomRight, BottomLeft
 		line(img, origPoints[0], origPoints[1], Scalar(0, 255, 0), 2, 8);

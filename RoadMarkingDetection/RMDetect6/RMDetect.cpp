@@ -85,7 +85,7 @@ int main()
 
 		matchPoints.clear();
 
-		waitKey(1);
+		waitKey(300);
 	}
 	
 	return 0;
