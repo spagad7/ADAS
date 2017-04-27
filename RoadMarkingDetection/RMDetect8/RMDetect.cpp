@@ -17,9 +17,9 @@ Mat calculateHomography(void);
 void loadImages(string, vector<Mat> &, bool);
 void getFilesInDir(string, vector<string> &, bool);
 int findMatch(Mat , vector<Mat>, vector<Point> &);
-Mat drawPolygon(Mat , Mat, vector<Point> &);
-void findLaneMarker(Mat img);
-double calcSSD(Mat, Mat);
+Mat drawTextPolygon(Mat , Mat, vector<Point> &, int);
+//void findLaneMarker(Mat img);
+//double calcSSD(Mat, Mat);
 
 map<int, string> template_names;
 
@@ -47,15 +47,18 @@ int main()
 
 	for(unsigned int i=0; i<images.size(); i++)
 	{
-		
+		//imshow("Source Image", images[i]);
+
 		// Set region of interest
 		Mat img_roi = images[i](Rect(285, 300, 230, 90));
+		//imshow("Region of Interest", img_roi);
 		
 		// Create black destination image
 		Mat img_warp(300, 200, CV_8UC3, Scalar(0,0,0));
 
 		// Warp image
 		warpPerspective(img_roi, img_warp, H, img_warp.size());
+		//imshow("IPM image", img_warp);
 
 		// Draw ROI on img
 		line(images[i], Point(375, 300), Point(445, 300), Scalar(0, 0, 255), 2, 8);
@@ -70,23 +73,11 @@ int main()
 		int matchIndex = findMatch(img_warp, templates, matchPoints);
 
 		// Draw polygon for matched region
-		Mat img_final = drawPolygon(images[i], I, matchPoints);
+		Mat img_final = drawTextPolygon(images[i], I, matchPoints, matchIndex);
 
-		if(matchIndex != -1)
-		{
-			putText(img_final, 
-				template_names[matchIndex], 
-				cvPoint(30,30), 
-    			FONT_HERSHEY_COMPLEX_SMALL, 
-    			0.8, 
-    			cvScalar(0,255,0), 
-    			1, 
-    			CV_AA);
-		}
 		
-
-		//string filename = "../Output/img" + to_string(i) + ".jpg";
-		//imwrite(filename, img_final);
+		string filename = "../Output/img" + to_string(i) + ".jpg";
+		imwrite(filename, img_final);
 
 		imshow("Final Output:", img_final);
 
@@ -102,7 +93,7 @@ int main()
 
 
 
-// Function to load templates
+// Function to load images and templates
 void loadImages(string dirName, vector<Mat> &imgVector, bool flag)
 {
 	vector<string> files;
@@ -141,6 +132,7 @@ void getFilesInDir(string dirName, vector<string> &files, bool flag)
 
 	sort(files.begin(), files.end());
 
+	// Save template names for labelling detected templates
 	if(flag == true)
 	{
 		for(unsigned int i=0; i<files.size(); i++)
@@ -182,38 +174,38 @@ Mat calculateHomography(void)
 // Function to detect road markings using template matching
 int findMatch(Mat img_src, vector<Mat> templates, vector<Point> &matchPoints)
 {
-	Mat img_src_gray, img_src_edge;
+	Mat img_src_gray, img_src_edge, img_src_thresh;
 	unsigned int numTemplates = templates.size();
 	vector<double> maxVal(numTemplates), minVal(numTemplates), ssd(numTemplates);
 	vector<Point> minLoc(numTemplates), maxLoc(numTemplates);
 	int cannyLowThresh = 50;
-	int cannyHighThresh = 150;
-	double matchThresh = 0.2;
+	int cannyHighThresh = 100;
+	double matchThresh = 0.3;
 
 	//resize(img_temp, img_temp, Size(cols, rows), 0,0, INTER_LINEAR);
 
 	// Get edge image of img_dst and img_temp
 	cvtColor(img_src, img_src_gray, CV_BGR2GRAY);
-	blur(img_src_gray, img_src_edge, Size(3,3) );
+	//threshold(img_src_gray, img_src_thresh, 150, 255, THRESH_BINARY);
+	blur(img_src_gray, img_src_edge, Size(5,5) );
 	Canny(img_src_edge, img_src_edge, cannyLowThresh, cannyHighThresh);
+	//imshow("Edge Image", img_src_edge);
 	
 	
 	#pragma omp parallel for
 	for(unsigned int i=0; i<templates.size(); i++)
 	{
-		Mat img_temp_gray, img_temp_edge;
+		Mat img_temp_gray, img_temp_edge, img_temp_thresh;
 		cvtColor(templates[i], img_temp_gray, CV_BGR2GRAY);
-		blur(img_temp_gray, img_temp_edge, Size(3,3) );
+		//threshold(img_temp_gray, img_temp_thresh, 150, 255, THRESH_BINARY);
+		blur(img_temp_gray, img_temp_edge, Size(5,5) );
 		Canny(img_temp_edge, img_temp_edge, cannyLowThresh, cannyHighThresh);
-		//imshow("Template Edge", img_temp_edge);
-		//waitKey(0);
+		//imshow("Template Edge Image", img_temp_edge);
 
 		Mat img_result;
-		//matchTemplate(img_src, templates[i], img_result, CV_TM_CCORR_NORMED);
 		matchTemplate(img_src_edge, img_temp_edge, img_result, CV_TM_CCORR_NORMED);
 		//normalize(img_result, img_result, 0, 1, NORM_MINMAX, -1, Mat());
 		minMaxLoc(img_result, &minVal[i], &maxVal[i], &minLoc[i], &maxLoc[i], Mat());
-		Mat img_src_cropped = img_src(Rect(maxLoc[i].x, maxLoc[i].y, templates[i].cols, templates[i].rows));
 		//ssd[i] = calcSSD(img_src_cropped, templates[i]);
 		//cout << "SSD: " << ssd[i] << endl;
 		//cout << "maxVal: " << maxVal[i] << endl;
@@ -239,7 +231,7 @@ int findMatch(Mat img_src, vector<Mat> templates, vector<Point> &matchPoints)
 		matchPoints.push_back(Point(maxLoc[bestIndex].x, maxLoc[bestIndex].y + templates[bestIndex].rows));
 
 		// Display template name
-		cout << template_names[bestIndex] << endl;
+		//cout << template_names[bestIndex] << endl;
 
 		return bestIndex;
 	}
@@ -249,7 +241,7 @@ int findMatch(Mat img_src, vector<Mat> templates, vector<Point> &matchPoints)
 
 
 
-Mat drawPolygon(Mat img, Mat I, vector<Point> &warpedPoints)
+Mat drawTextPolygon(Mat img, Mat I, vector<Point> &warpedPoints, int matchIndex)
 {
 	if(!warpedPoints.empty())
 	{
@@ -280,9 +272,37 @@ Mat drawPolygon(Mat img, Mat I, vector<Point> &warpedPoints)
 		line(img, origPoints[2], origPoints[3], Scalar(0, 255, 0), 2, 8);
 		line(img, origPoints[3], origPoints[0], Scalar(0, 255, 0), 2, 8);
 
+
+		// Get template name
+		if(matchIndex != -1)
+		{
+			string tempName;
+			const char *tmp = template_names[matchIndex].c_str();
+
+			for(unsigned int i=13; i<template_names[matchIndex].size(); i++)
+			{
+				if(tmp[i] == '.' || isdigit(tmp[i]))
+					break;
+				else if(tmp[i] == '_')
+					tempName.push_back(' ');
+				else
+					tempName.push_back(tmp[i]);
+			}
+
+			putText(img, 
+				tempName, 
+				cvPoint(origPoints[0].x, origPoints[0].y - 10),
+    			FONT_HERSHEY_COMPLEX_SMALL, 
+    			1.5, 
+    			cvScalar(0,255,255), 
+    			1, 
+    			CV_AA);
+
+		}
+
 		origPoints.clear();
 	}
-	
+
 	return(img);
 }
 
@@ -346,7 +366,5 @@ void findLaneMarker(Mat img)
 		}
 		
 	}
-	//imshow("Lines", img);
-	//waitKey(0);
 }
 */
